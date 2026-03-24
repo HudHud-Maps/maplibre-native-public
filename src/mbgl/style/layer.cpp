@@ -8,6 +8,7 @@
 
 #include <mbgl/renderer/render_layer.hpp>
 #include <mbgl/util/logging.hpp>
+#include <mbgl/util/map_profiler.hpp>
 
 namespace mbgl {
 namespace style {
@@ -165,6 +166,9 @@ void Layer::setObserver(LayerObserver* observer_) {
 
 std::optional<conversion::Error> Layer::setProperty(const std::string& name, const conversion::Convertible& value) {
     using namespace conversion;
+    MLN_MAP_PROFILE_CONTEXT(baseImpl->id.c_str(), name.c_str());
+    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StylePropertyParse, nullptr);
+
     std::optional<Error> error = setPropertyInternal(name, value);
     if (!error) return error; // Successfully set by the derived class implementation.
     if (name == "visibility") return setVisibility(value);

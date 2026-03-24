@@ -21,6 +21,7 @@
 #include <mbgl/util/exception.hpp>
 #include <mbgl/util/stopwatch.hpp>
 #include <mbgl/util/thread_pool.hpp>
+#include <mbgl/util/map_profiler.hpp>
 
 #include <unordered_set>
 #include <utility>
@@ -449,6 +450,9 @@ void GeometryTileWorker::parse() {
         }
 
         const style::Layer::Impl& leaderImpl = *(group.at(0)->baseImpl);
+        MLN_MAP_PROFILE_CONTEXT(leaderImpl.id.c_str(), nullptr);
+        MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileLayerParse, nullptr);
+
         BucketParameters parameters{
             .tileID = id, .mode = mode, .pixelRatio = pixelRatio, .layerType = leaderImpl.getTypeInfo()};
 
@@ -492,9 +496,13 @@ void GeometryTileWorker::parse() {
             for (std::size_t i = 0; !obsolete && i < geometryLayer->featureCount(); i++) {
                 std::unique_ptr<GeometryTileFeature> feature = geometryLayer->getFeature(i);
 
-                if (!filter(expression::EvaluationContext(static_cast<float>(this->id.overscaledZ), feature.get())
-                                .withCanonicalTileID(&id.canonical)))
-                    continue;
+                {
+                    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileFilterEvaluate, nullptr);
+                    if (!filter(expression::EvaluationContext(static_cast<float>(this->id.overscaledZ), feature.get())
+                                    .withCanonicalTileID(&id.canonical))) {
+                        continue;
+                    }
+                }
 
                 const GeometryCollection& geometries = feature->getGeometries();
                 bucket->addFeature(*feature, geometries, {}, PatternLayerMap(), i, id.canonical);

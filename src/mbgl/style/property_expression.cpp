@@ -24,7 +24,8 @@ PropertyExpressionBase::PropertyExpressionBase(std::unique_ptr<expression::Expre
       isZoomConstant_(!expression->has(Dependency::Zoom)),
       isFeatureConstant_(!expression->has(Dependency::Feature)),
       isRuntimeConstant_(!expression->has(Dependency::Image)),
-      isGPUCapable_(checkGPUCapable(*expression, zoomCurve)) {
+      isGPUCapable_(checkGPUCapable(*expression, zoomCurve)),
+      operatorName_(expression->getOperator()) {
     assert(isZoomConstant_ == expression::isZoomConstant(*expression));
     assert(isFeatureConstant_ == expression::isFeatureConstant(*expression));
     assert(isRuntimeConstant_ == expression::isRuntimeConstant(*expression));
@@ -37,7 +38,8 @@ PropertyExpressionBase::PropertyExpressionBase(PropertyExpressionBase&& other)
       isZoomConstant_(other.isZoomConstant_),
       isFeatureConstant_(other.isFeatureConstant_),
       isRuntimeConstant_(other.isRuntimeConstant_),
-      isGPUCapable_(other.isGPUCapable_) {}
+      isGPUCapable_(other.isGPUCapable_),
+      operatorName_(std::move(other.operatorName_)) {}
 
 PropertyExpressionBase::PropertyExpressionBase(const PropertyExpressionBase& other)
     : expression(other.expression),
@@ -46,7 +48,8 @@ PropertyExpressionBase::PropertyExpressionBase(const PropertyExpressionBase& oth
       isZoomConstant_(other.isZoomConstant_),
       isFeatureConstant_(other.isFeatureConstant_),
       isRuntimeConstant_(other.isRuntimeConstant_),
-      isGPUCapable_(other.isGPUCapable_) {}
+      isGPUCapable_(other.isGPUCapable_),
+      operatorName_(other.operatorName_) {}
 
 PropertyExpressionBase& PropertyExpressionBase::operator=(PropertyExpressionBase&& other) {
     expression = std::move(other.expression);
@@ -56,6 +59,7 @@ PropertyExpressionBase& PropertyExpressionBase::operator=(PropertyExpressionBase
     isFeatureConstant_ = other.isFeatureConstant_;
     isRuntimeConstant_ = other.isRuntimeConstant_;
     isGPUCapable_ = other.isGPUCapable_;
+    operatorName_ = std::move(other.operatorName_);
     return *this;
 }
 
@@ -67,6 +71,7 @@ PropertyExpressionBase& PropertyExpressionBase::operator=(const PropertyExpressi
     isFeatureConstant_ = other.isFeatureConstant_;
     isRuntimeConstant_ = other.isRuntimeConstant_;
     isGPUCapable_ = other.isGPUCapable_;
+    operatorName_ = other.operatorName_;
     return *this;
 }
 

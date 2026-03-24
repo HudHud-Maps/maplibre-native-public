@@ -10,6 +10,7 @@
 #include <mbgl/style/conversion_impl.hpp>
 
 #include <mbgl/util/logging.hpp>
+#include <mbgl/util/map_profiler.hpp>
 #include <mbgl/util/string.hpp>
 #include <mbgl/util/convert.hpp>
 
@@ -342,6 +343,9 @@ void Parser::parseLayers(const JSValue& value) {
 }
 
 void Parser::parseLayer(const std::string& id, const JSValue& value, std::unique_ptr<Layer>& layer) {
+    MLN_MAP_PROFILE_CONTEXT(id.c_str(), nullptr);
+    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StyleLayerParse, nullptr);
+
     if (layer) {
         // Skip parsing this again. We already have a valid layer definition.
         return;

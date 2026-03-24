@@ -6,10 +6,12 @@
 #include <mbgl/style/expression/step.hpp>
 #include <mbgl/style/expression/find_zoom_curve.hpp>
 #include <mbgl/util/bitmask_operations.hpp>
+#include <mbgl/util/map_profiler.hpp>
 #include <mbgl/util/range.hpp>
 #include <mbgl/gfx/gpu_expression.hpp>
 
 #include <optional>
+#include <string>
 
 namespace mbgl {
 namespace gfx {
@@ -44,6 +46,7 @@ public:
 
     bool getUseIntegerZoom() const { return useIntegerZoom_; }
     void setUseIntegerZoom(bool value) { useIntegerZoom_ = value; }
+    const char* getOperatorName() const noexcept { return operatorName_.c_str(); }
 
     /// Can be used for aggregating property expressions from multiple properties(layers) into single match / case
     /// expression. May be removed if a better way of aggregation is found.
@@ -69,6 +72,7 @@ protected:
     // If the expression depends on zoom and nothing else, and produces
     // a number or color, we can potentially evaluate it on the GPU
     bool isGPUCapable_;
+    std::string operatorName_;
 };
 
 template <class T>
@@ -82,6 +86,8 @@ public:
           defaultValue(std::move(defaultValue_)) {}
 
     T evaluate(const expression::EvaluationContext& context, T finalDefaultValue = T()) const {
+        MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::ExpressionEvaluate, getOperatorName());
+
         const expression::EvaluationResult result = expression->evaluate(context);
         if (result) {
             const std::optional<T> typed = expression::fromExpressionValue<T>(*result);

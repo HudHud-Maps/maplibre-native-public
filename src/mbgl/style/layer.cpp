@@ -166,7 +166,11 @@ void Layer::setObserver(LayerObserver* observer_) {
 
 std::optional<conversion::Error> Layer::setProperty(const std::string& name, const conversion::Convertible& value) {
     using namespace conversion;
-    MLN_MAP_PROFILE_CONTEXT(baseImpl->id.c_str(), name.c_str());
+    const char* sourceLayer = baseImpl->sourceLayer.empty() ? nullptr : baseImpl->sourceLayer.c_str();
+    if (!sourceLayer && !baseImpl->source.empty()) {
+        sourceLayer = baseImpl->source.c_str();
+    }
+    MLN_MAP_PROFILE_CONTEXT_DETAIL(baseImpl->id.c_str(), sourceLayer, name.c_str());
     MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StylePropertyParse, nullptr);
 
     std::optional<Error> error = setPropertyInternal(name, value);

@@ -343,7 +343,20 @@ void Parser::parseLayers(const JSValue& value) {
 }
 
 void Parser::parseLayer(const std::string& id, const JSValue& value, std::unique_ptr<Layer>& layer) {
-    MLN_MAP_PROFILE_CONTEXT(id.c_str(), nullptr);
+    const char* sourceLayer = nullptr;
+    if (value.HasMember("source-layer") && value["source-layer"].IsString()) {
+        sourceLayer = value["source-layer"].GetString();
+    } else if (value.HasMember("source") && value["source"].IsString()) {
+        sourceLayer = value["source"].GetString();
+    }
+
+    const char* layerType = nullptr;
+    if (value.HasMember("type") && value["type"].IsString()) {
+        layerType = value["type"].GetString();
+    } else if (value.HasMember("ref") && value["ref"].IsString()) {
+        layerType = "ref";
+    }
+    MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), sourceLayer, layerType);
     MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StyleLayerParse, nullptr);
 
     if (layer) {

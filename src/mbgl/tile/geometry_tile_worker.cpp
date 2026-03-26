@@ -450,7 +450,15 @@ void GeometryTileWorker::parse() {
         }
 
         const style::Layer::Impl& leaderImpl = *(group.at(0)->baseImpl);
-        MLN_MAP_PROFILE_CONTEXT(leaderImpl.id.c_str(), nullptr);
+        const char* sourceLayer = leaderImpl.sourceLayer.empty() ? nullptr : leaderImpl.sourceLayer.c_str();
+        if (!sourceLayer && !leaderImpl.source.empty()) {
+            sourceLayer = leaderImpl.source.c_str();
+        }
+        const char* layerType = leaderImpl.getTypeInfo() ? leaderImpl.getTypeInfo()->type : nullptr;
+        if (!layerType && !leaderImpl.source.empty()) {
+            layerType = leaderImpl.source.c_str();
+        }
+        MLN_MAP_PROFILE_CONTEXT_DETAIL(leaderImpl.id.c_str(), sourceLayer, layerType);
         MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileLayerParse, nullptr);
 
         BucketParameters parameters{
@@ -497,7 +505,7 @@ void GeometryTileWorker::parse() {
                 std::unique_ptr<GeometryTileFeature> feature = geometryLayer->getFeature(i);
 
                 {
-                    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileFilterEvaluate, nullptr);
+                    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileFilterEvaluate, "filter");
                     if (!filter(expression::EvaluationContext(static_cast<float>(this->id.overscaledZ), feature.get())
                                     .withCanonicalTileID(&id.canonical))) {
                         continue;

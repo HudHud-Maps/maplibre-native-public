@@ -318,7 +318,15 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
 
         if (layerAddedOrChanged || zoomChangedAndMatters || evaluationParameters.hasCrossfade ||
             layer.hasTransition()) {
-            MLN_MAP_PROFILE_CONTEXT(id.c_str(), nullptr);
+            const char* sourceLayer = layer.baseImpl->sourceLayer.empty() ? nullptr : layer.baseImpl->sourceLayer.c_str();
+            if (!sourceLayer && !layer.baseImpl->source.empty()) {
+                sourceLayer = layer.baseImpl->source.c_str();
+            }
+            const char* layerType = layer.baseImpl->getTypeInfo() ? layer.baseImpl->getTypeInfo()->type : nullptr;
+            if (!layerType && !layer.baseImpl->source.empty()) {
+                layerType = layer.baseImpl->source.c_str();
+            }
+            MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), sourceLayer, layerType);
             MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::RenderLayerEvaluate, nullptr);
 
             const auto previousMask = layer.evaluatedProperties->constantsMask();

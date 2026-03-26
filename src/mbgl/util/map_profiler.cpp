@@ -71,7 +71,7 @@ struct AggregationShard {
 
 struct State {
     std::atomic<uint32_t> sinkRefs{0};
-    std::atomic<uint32_t> evalSampleRate{8};
+    std::atomic<uint32_t> evalSampleRate{16};
     std::atomic<uint64_t> sampleCounter{0};
     std::atomic<uint64_t> droppedSamples{0};
     std::atomic<uint64_t> windowStartNs{0};
@@ -121,6 +121,7 @@ const char* normalize(const char* value) noexcept {
 bool isHighVolumeStage(const Stage stage) noexcept {
     switch (stage) {
         case Stage::ExpressionEvaluate:
+        case Stage::RenderLayerEvaluate:
         case Stage::TileFilterEvaluate:
             return true;
         default:
@@ -288,6 +289,17 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     , tracyCtx({})
 #endif
 {
+    const bool sinkEnabled = isEnabled();
+
+#if MLN_MAP_PROFILER_SIGNPOST
+    auto& profilerState = state();
+    const bool signpostEnabled = os_signpost_enabled(profilerState.signpostLog);
+#else
+    const bool signpostEnabled = false;
+#endif
+
+    const bool sampled = (sinkEnabled || signpostEnabled) ? shouldSample(stage_) : false;
+
     layer = currentContext.layer;
     property = currentContext.property;
     layerHash = currentContext.layerHash;
@@ -301,48 +313,49 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     }
 
 #if MLN_MAP_PROFILER_SIGNPOST
-    auto& profilerState = state();
-    signpostID = os_signpost_id_generate(profilerState.signpostLog);
+    if (sampled && signpostEnabled) {
+        signpostID = os_signpost_id_generate(profilerState.signpostLog);
 #define MLN_SIGNPOST_BEGIN(nameLiteral)                                                                                 \
     os_signpost_interval_begin(profilerState.signpostLog,                                                                \
                                signpostID,                                                                              \
                                nameLiteral,                                                                             \
                                "layer=%{public}s property=%{public}s detail=%{public}s",                              \
-                               layer ? layer : "",                                                                      \
-                               property ? property : "",                                                                \
-                               detail ? detail : "")
-    switch (stage) {
-        case Stage::StyleLayerParse:
-            MLN_SIGNPOST_BEGIN("style_layer_parse");
-            break;
-        case Stage::StylePropertyParse:
-            MLN_SIGNPOST_BEGIN("style_property_parse");
-            break;
-        case Stage::ExpressionParse:
-            MLN_SIGNPOST_BEGIN("expression_parse");
-            break;
-        case Stage::ExpressionEvaluate:
-            MLN_SIGNPOST_BEGIN("expression_evaluate");
-            break;
-        case Stage::RenderLayerEvaluate:
-            MLN_SIGNPOST_BEGIN("render_layer_evaluate");
-            break;
-        case Stage::TileLayerParse:
-            MLN_SIGNPOST_BEGIN("tile_layer_parse");
-            break;
-        case Stage::TileFilterEvaluate:
-            MLN_SIGNPOST_BEGIN("tile_filter_evaluate");
-            break;
-    }
+                               layer ? layer : "-",                                                                     \
+                               property ? property : "-",                                                               \
+                               detail ? detail : "-")
+        switch (stage) {
+            case Stage::StyleLayerParse:
+                MLN_SIGNPOST_BEGIN("style_layer_parse");
+                break;
+            case Stage::StylePropertyParse:
+                MLN_SIGNPOST_BEGIN("style_property_parse");
+                break;
+            case Stage::ExpressionParse:
+                MLN_SIGNPOST_BEGIN("expression_parse");
+                break;
+            case Stage::ExpressionEvaluate:
+                MLN_SIGNPOST_BEGIN("expression_evaluate");
+                break;
+            case Stage::RenderLayerEvaluate:
+                MLN_SIGNPOST_BEGIN("render_layer_evaluate");
+                break;
+            case Stage::TileLayerParse:
+                MLN_SIGNPOST_BEGIN("tile_layer_parse");
+                break;
+            case Stage::TileFilterEvaluate:
+                MLN_SIGNPOST_BEGIN("tile_filter_evaluate");
+                break;
+        }
 #undef MLN_SIGNPOST_BEGIN
-    signpostActive = true;
+        signpostActive = true;
+    }
 #endif
 
 #if MLN_MAP_PROFILER_TRACY
     tracyCtx = TracyCZoneN(stageToString(stage), 1);
 #endif
 
-    if (isEnabled() && shouldSample(stage_)) {
+    if (sinkEnabled && sampled) {
         active = true;
         startNs = nowNs();
     }
@@ -356,29 +369,38 @@ ScopedEvent::~ScopedEvent() {
 #if MLN_MAP_PROFILER_SIGNPOST
     if (signpostActive) {
         auto& profilerState = state();
+#define MLN_SIGNPOST_END(nameLiteral)                                                                                   \
+    os_signpost_interval_end(profilerState.signpostLog,                                                                  \
+                             signpostID,                                                                                \
+                             nameLiteral,                                                                               \
+                             "layer=%{public}s property=%{public}s detail=%{public}s",                                \
+                             layer ? layer : "-",                                                                       \
+                             property ? property : "-",                                                                 \
+                             detail ? detail : "-")
         switch (stage) {
             case Stage::StyleLayerParse:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "style_layer_parse");
+                MLN_SIGNPOST_END("style_layer_parse");
                 break;
             case Stage::StylePropertyParse:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "style_property_parse");
+                MLN_SIGNPOST_END("style_property_parse");
                 break;
             case Stage::ExpressionParse:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "expression_parse");
+                MLN_SIGNPOST_END("expression_parse");
                 break;
             case Stage::ExpressionEvaluate:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "expression_evaluate");
+                MLN_SIGNPOST_END("expression_evaluate");
                 break;
             case Stage::RenderLayerEvaluate:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "render_layer_evaluate");
+                MLN_SIGNPOST_END("render_layer_evaluate");
                 break;
             case Stage::TileLayerParse:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "tile_layer_parse");
+                MLN_SIGNPOST_END("tile_layer_parse");
                 break;
             case Stage::TileFilterEvaluate:
-                os_signpost_interval_end(profilerState.signpostLog, signpostID, "tile_filter_evaluate");
+                MLN_SIGNPOST_END("tile_filter_evaluate");
                 break;
         }
+#undef MLN_SIGNPOST_END
     }
 #endif
 

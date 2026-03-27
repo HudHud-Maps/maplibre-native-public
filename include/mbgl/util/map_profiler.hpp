@@ -70,12 +70,14 @@ public:
     ScopedContext& operator=(const ScopedContext&) = delete;
 
 private:
+#if MLN_MAP_PROFILER_ENABLE
     const char* previousLayer = nullptr;
     const char* previousProperty = nullptr;
     const char* previousDetail = nullptr;
     uint64_t previousLayerHash = 0;
     uint64_t previousPropertyHash = 0;
     uint64_t previousDetailHash = 0;
+#endif
 };
 
 class ScopedEvent {
@@ -87,6 +89,7 @@ public:
     ScopedEvent& operator=(const ScopedEvent&) = delete;
 
 private:
+#if MLN_MAP_PROFILER_ENABLE
     Stage stage;
     bool active = false;
     const char* layer = nullptr;
@@ -105,6 +108,7 @@ private:
 #if MLN_MAP_PROFILER_TRACY
     TracyCZoneCtx tracyCtx;
 #endif
+#endif
 };
 
 Snapshot consumeSnapshot(std::size_t topK);
@@ -114,15 +118,14 @@ Snapshot consumeSnapshot(std::size_t topK);
 #if MLN_MAP_PROFILER_ENABLE
 #define MLN_MAP_PROFILER_CONCAT_INNER(x, y) x##y
 #define MLN_MAP_PROFILER_CONCAT(x, y) MLN_MAP_PROFILER_CONCAT_INNER(x, y)
-#define MLN_MAP_PROFILE_SCOPE(stage, detail)                                                               \
+#define MLN_MAP_PROFILE_SCOPE(stage, detail) \
     ::mbgl::util::map_profiler::ScopedEvent MLN_MAP_PROFILER_CONCAT(_mlnMapProfileScope_, __LINE__)((stage), (detail))
-#define MLN_MAP_PROFILE_CONTEXT(layer, property)                                                               \
-    ::mbgl::util::map_profiler::ScopedContext MLN_MAP_PROFILER_CONCAT(_mlnMapProfileContext_, __LINE__)((layer), (property))
-#define MLN_MAP_PROFILE_CONTEXT_DETAIL(layer, property, detail)                                                 \
-    ::mbgl::util::map_profiler::ScopedContext MLN_MAP_PROFILER_CONCAT(_mlnMapProfileContext_, __LINE__)(       \
-        (layer),                                                                                                 \
-        (property),                                                                                              \
-        (detail))
+#define MLN_MAP_PROFILE_CONTEXT(layer, property)                                                                 \
+    ::mbgl::util::map_profiler::ScopedContext MLN_MAP_PROFILER_CONCAT(_mlnMapProfileContext_, __LINE__)((layer), \
+                                                                                                        (property))
+#define MLN_MAP_PROFILE_CONTEXT_DETAIL(layer, property, detail)                                          \
+    ::mbgl::util::map_profiler::ScopedContext MLN_MAP_PROFILER_CONCAT(_mlnMapProfileContext_, __LINE__)( \
+        (layer), (property), (detail))
 #else
 #define MLN_MAP_PROFILE_SCOPE(stage, detail) ((void)0)
 #define MLN_MAP_PROFILE_CONTEXT(layer, property) ((void)0)

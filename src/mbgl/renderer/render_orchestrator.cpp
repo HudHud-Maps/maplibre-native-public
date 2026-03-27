@@ -318,16 +318,20 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
 
         if (layerAddedOrChanged || zoomChangedAndMatters || evaluationParameters.hasCrossfade ||
             layer.hasTransition()) {
-            const char* sourceLayer = layer.baseImpl->sourceLayer.empty() ? nullptr : layer.baseImpl->sourceLayer.c_str();
-            if (!sourceLayer && !layer.baseImpl->source.empty()) {
-                sourceLayer = layer.baseImpl->source.c_str();
+#if MLN_MAP_PROFILER_ENABLE
+            const char* profileSourceLayer = layer.baseImpl->sourceLayer.empty() ? nullptr
+                                                                                 : layer.baseImpl->sourceLayer.c_str();
+            if (!profileSourceLayer && !layer.baseImpl->source.empty()) {
+                profileSourceLayer = layer.baseImpl->source.c_str();
             }
-            const char* layerType = layer.baseImpl->getTypeInfo() ? layer.baseImpl->getTypeInfo()->type : nullptr;
-            if (!layerType && !layer.baseImpl->source.empty()) {
-                layerType = layer.baseImpl->source.c_str();
+            const char* profileLayerType = layer.baseImpl->getTypeInfo() ? layer.baseImpl->getTypeInfo()->type
+                                                                         : nullptr;
+            if (!profileLayerType && !layer.baseImpl->source.empty()) {
+                profileLayerType = layer.baseImpl->source.c_str();
             }
-            MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), sourceLayer, layerType);
+            MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), profileSourceLayer, profileLayerType);
             MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::RenderLayerEvaluate, nullptr);
+#endif
 
             const auto previousMask = layer.evaluatedProperties->constantsMask();
             layer.evaluate(evaluationParameters);

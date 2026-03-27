@@ -450,16 +450,18 @@ void GeometryTileWorker::parse() {
         }
 
         const style::Layer::Impl& leaderImpl = *(group.at(0)->baseImpl);
-        const char* sourceLayer = leaderImpl.sourceLayer.empty() ? nullptr : leaderImpl.sourceLayer.c_str();
-        if (!sourceLayer && !leaderImpl.source.empty()) {
-            sourceLayer = leaderImpl.source.c_str();
+#if MLN_MAP_PROFILER_ENABLE
+        const char* profileSourceLayer = leaderImpl.sourceLayer.empty() ? nullptr : leaderImpl.sourceLayer.c_str();
+        if (!profileSourceLayer && !leaderImpl.source.empty()) {
+            profileSourceLayer = leaderImpl.source.c_str();
         }
-        const char* layerType = leaderImpl.getTypeInfo() ? leaderImpl.getTypeInfo()->type : nullptr;
-        if (!layerType && !leaderImpl.source.empty()) {
-            layerType = leaderImpl.source.c_str();
+        const char* profileLayerType = leaderImpl.getTypeInfo() ? leaderImpl.getTypeInfo()->type : nullptr;
+        if (!profileLayerType && !leaderImpl.source.empty()) {
+            profileLayerType = leaderImpl.source.c_str();
         }
-        MLN_MAP_PROFILE_CONTEXT_DETAIL(leaderImpl.id.c_str(), sourceLayer, layerType);
+        MLN_MAP_PROFILE_CONTEXT_DETAIL(leaderImpl.id.c_str(), profileSourceLayer, profileLayerType);
         MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileLayerParse, nullptr);
+#endif
 
         BucketParameters parameters{
             .tileID = id, .mode = mode, .pixelRatio = pixelRatio, .layerType = leaderImpl.getTypeInfo()};

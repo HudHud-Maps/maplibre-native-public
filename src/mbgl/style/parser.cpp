@@ -343,21 +343,23 @@ void Parser::parseLayers(const JSValue& value) {
 }
 
 void Parser::parseLayer(const std::string& id, const JSValue& value, std::unique_ptr<Layer>& layer) {
-    const char* sourceLayer = nullptr;
+#if MLN_MAP_PROFILER_ENABLE
+    const char* profileSourceLayer = nullptr;
     if (value.HasMember("source-layer") && value["source-layer"].IsString()) {
-        sourceLayer = value["source-layer"].GetString();
+        profileSourceLayer = value["source-layer"].GetString();
     } else if (value.HasMember("source") && value["source"].IsString()) {
-        sourceLayer = value["source"].GetString();
+        profileSourceLayer = value["source"].GetString();
     }
 
-    const char* layerType = nullptr;
+    const char* profileLayerType = nullptr;
     if (value.HasMember("type") && value["type"].IsString()) {
-        layerType = value["type"].GetString();
+        profileLayerType = value["type"].GetString();
     } else if (value.HasMember("ref") && value["ref"].IsString()) {
-        layerType = "ref";
+        profileLayerType = "ref";
     }
-    MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), sourceLayer, layerType);
+    MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), profileSourceLayer, profileLayerType);
     MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StyleLayerParse, nullptr);
+#endif
 
     if (layer) {
         // Skip parsing this again. We already have a valid layer definition.

@@ -166,12 +166,14 @@ void Layer::setObserver(LayerObserver* observer_) {
 
 std::optional<conversion::Error> Layer::setProperty(const std::string& name, const conversion::Convertible& value) {
     using namespace conversion;
-    const char* sourceLayer = baseImpl->sourceLayer.empty() ? nullptr : baseImpl->sourceLayer.c_str();
-    if (!sourceLayer && !baseImpl->source.empty()) {
-        sourceLayer = baseImpl->source.c_str();
+#if MLN_MAP_PROFILER_ENABLE
+    const char* profileSourceLayer = baseImpl->sourceLayer.empty() ? nullptr : baseImpl->sourceLayer.c_str();
+    if (!profileSourceLayer && !baseImpl->source.empty()) {
+        profileSourceLayer = baseImpl->source.c_str();
     }
-    MLN_MAP_PROFILE_CONTEXT_DETAIL(baseImpl->id.c_str(), sourceLayer, name.c_str());
+    MLN_MAP_PROFILE_CONTEXT_DETAIL(baseImpl->id.c_str(), profileSourceLayer, name.c_str());
     MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StylePropertyParse, nullptr);
+#endif
 
     std::optional<Error> error = setPropertyInternal(name, value);
     if (!error) return error; // Successfully set by the derived class implementation.

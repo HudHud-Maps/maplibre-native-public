@@ -73,6 +73,7 @@ struct State {
     std::atomic<uint32_t> sinkRefs{0};
     std::atomic<uint32_t> evalSampleRate{16};
     std::atomic<uint64_t> sampleCounter{0};
+    std::atomic<uint64_t> signpostSampleCounter{0};
     std::atomic<uint64_t> droppedSamples{0};
     std::atomic<uint64_t> windowStartNs{0};
     std::array<AggregationShard, shardCount> shards;
@@ -96,8 +97,8 @@ State& state() {
 }
 
 uint64_t nowNs() noexcept {
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch())
-                                     .count());
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count());
 }
 
 uint64_t hashCString(const char* str) noexcept {
@@ -140,6 +141,16 @@ bool shouldSample(const Stage stage) noexcept {
     }
 
     const uint64_t ticket = state().sampleCounter.fetch_add(1, std::memory_order_relaxed);
+    return (ticket % sampleRate) == 0;
+}
+
+bool shouldSampleSignpost() noexcept {
+    const uint32_t sampleRate = state().evalSampleRate.load(std::memory_order_relaxed);
+    if (sampleRate <= 1) {
+        return true;
+    }
+
+    const uint64_t ticket = state().signpostSampleCounter.fetch_add(1, std::memory_order_relaxed);
     return (ticket % sampleRate) == 0;
 }
 
@@ -234,8 +245,7 @@ void retainSink() noexcept {
 void releaseSink() noexcept {
     auto& profilerState = state();
     auto refs = profilerState.sinkRefs.load(std::memory_order_relaxed);
-    while (refs > 0 &&
-           !profilerState.sinkRefs.compare_exchange_weak(refs, refs - 1, std::memory_order_relaxed)) {
+    while (refs > 0 && !profilerState.sinkRefs.compare_exchange_weak(refs, refs - 1, std::memory_order_relaxed)) {
     }
 }
 
@@ -286,7 +296,8 @@ ScopedContext::~ScopedContext() {
 ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     : stage(stage_)
 #if MLN_MAP_PROFILER_TRACY
-    , tracyCtx({})
+      ,
+      tracyCtx({})
 #endif
 {
     const bool sinkEnabled = isEnabled();
@@ -298,7 +309,12 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     const bool signpostEnabled = false;
 #endif
 
-    const bool sampled = (sinkEnabled || signpostEnabled) ? shouldSample(stage_) : false;
+    const bool sinkSampled = sinkEnabled ? shouldSample(stage_) : false;
+    const bool signpostSampled = signpostEnabled ? shouldSampleSignpost() : false;
+
+    if (!sinkSampled && !signpostSampled) {
+        return;
+    }
 
     layer = currentContext.layer;
     property = currentContext.property;
@@ -313,15 +329,15 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     }
 
 #if MLN_MAP_PROFILER_SIGNPOST
-    if (sampled && signpostEnabled) {
+    if (signpostSampled) {
         signpostID = os_signpost_id_generate(profilerState.signpostLog);
-#define MLN_SIGNPOST_BEGIN(nameLiteral)                                                                                 \
-    os_signpost_interval_begin(profilerState.signpostLog,                                                                \
-                               signpostID,                                                                              \
-                               nameLiteral,                                                                             \
-                               "layer=%{public}s property=%{public}s detail=%{public}s",                              \
-                               layer ? layer : "-",                                                                     \
-                               property ? property : "-",                                                               \
+#define MLN_SIGNPOST_BEGIN(nameLiteral)                                                  \
+    os_signpost_interval_begin(profilerState.signpostLog,                                \
+                               signpostID,                                               \
+                               nameLiteral,                                              \
+                               "layer=%{public}s property=%{public}s detail=%{public}s", \
+                               layer ? layer : "-",                                      \
+                               property ? property : "-",                                \
                                detail ? detail : "-")
         switch (stage) {
             case Stage::StyleLayerParse:
@@ -355,7 +371,7 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
     tracyCtx = TracyCZoneN(stageToString(stage), 1);
 #endif
 
-    if (sinkEnabled && sampled) {
+    if (sinkSampled) {
         active = true;
         startNs = nowNs();
     }
@@ -369,13 +385,13 @@ ScopedEvent::~ScopedEvent() {
 #if MLN_MAP_PROFILER_SIGNPOST
     if (signpostActive) {
         auto& profilerState = state();
-#define MLN_SIGNPOST_END(nameLiteral)                                                                                   \
-    os_signpost_interval_end(profilerState.signpostLog,                                                                  \
-                             signpostID,                                                                                \
-                             nameLiteral,                                                                               \
-                             "layer=%{public}s property=%{public}s detail=%{public}s",                                \
-                             layer ? layer : "-",                                                                       \
-                             property ? property : "-",                                                                 \
+#define MLN_SIGNPOST_END(nameLiteral)                                                  \
+    os_signpost_interval_end(profilerState.signpostLog,                                \
+                             signpostID,                                               \
+                             nameLiteral,                                              \
+                             "layer=%{public}s property=%{public}s detail=%{public}s", \
+                             layer ? layer : "-",                                      \
+                             property ? property : "-",                                \
                              detail ? detail : "-")
         switch (stage) {
             case Stage::StyleLayerParse:
@@ -436,9 +452,9 @@ Snapshot consumeSnapshot(const std::size_t topK) {
         shard.entries.clear();
     }
 
-    std::sort(entries.begin(),
-              entries.end(),
-              [](const auto& lhs, const auto& rhs) { return lhs.totalDurationNs > rhs.totalDurationNs; });
+    std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.totalDurationNs > rhs.totalDurationNs;
+    });
 
     if (topK > 0 && entries.size() > topK) {
         entries.resize(topK);
@@ -456,10 +472,16 @@ namespace mbgl::util::map_profiler {
 
 void retainSink() noexcept {}
 void releaseSink() noexcept {}
-bool isEnabled() noexcept { return false; }
+bool isEnabled() noexcept {
+    return false;
+}
 void setEvalSampleRate(uint32_t) noexcept {}
-uint32_t getEvalSampleRate() noexcept { return 1; }
-const char* stageToString(Stage) noexcept { return "disabled"; }
+uint32_t getEvalSampleRate() noexcept {
+    return 1;
+}
+const char* stageToString(Stage) noexcept {
+    return "disabled";
+}
 
 ScopedContext::ScopedContext(const char*, const char*, const char*) noexcept {}
 ScopedContext::~ScopedContext() = default;

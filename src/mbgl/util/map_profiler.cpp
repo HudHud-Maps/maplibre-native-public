@@ -328,9 +328,13 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
         detailHash = currentContext.detailHash;
     }
 
+    if (sinkSampled || signpostSampled) {
+        startNs = nowNs();
+    }
+
 #if MLN_MAP_PROFILER_SIGNPOST
     if (signpostSampled) {
-        signpostID = os_signpost_id_generate(profilerState.signpostLog);
+        signpostID = os_signpost_id_make_with_pointer(profilerState.signpostLog, this);
 #define MLN_SIGNPOST_BEGIN(nameLiteral)                                                  \
     os_signpost_interval_begin(profilerState.signpostLog,                                \
                                signpostID,                                               \
@@ -373,26 +377,31 @@ ScopedEvent::ScopedEvent(const Stage stage_, const char* detail_) noexcept
 
     if (sinkSampled) {
         active = true;
-        startNs = nowNs();
     }
 }
 
 ScopedEvent::~ScopedEvent() {
+    uint64_t durationNs = 0;
     if (active) {
-        record(stage, layer, property, detail, layerHash, propertyHash, detailHash, nowNs() - startNs);
+        durationNs = nowNs() - startNs;
+        record(stage, layer, property, detail, layerHash, propertyHash, detailHash, durationNs);
     }
 
 #if MLN_MAP_PROFILER_SIGNPOST
     if (signpostActive) {
+        if (!active) {
+            durationNs = nowNs() - startNs;
+        }
         auto& profilerState = state();
-#define MLN_SIGNPOST_END(nameLiteral)                                                  \
-    os_signpost_interval_end(profilerState.signpostLog,                                \
-                             signpostID,                                               \
-                             nameLiteral,                                              \
-                             "layer=%{public}s property=%{public}s detail=%{public}s", \
-                             layer ? layer : "-",                                      \
-                             property ? property : "-",                                \
-                             detail ? detail : "-")
+#define MLN_SIGNPOST_END(nameLiteral)                                                                     \
+    os_signpost_interval_end(profilerState.signpostLog,                                                   \
+                             signpostID,                                                                  \
+                             nameLiteral,                                                                 \
+                             "layer=%{public}s property=%{public}s detail=%{public}s duration_ns=%llu", \
+                             layer ? layer : "-",                                                         \
+                             property ? property : "-",                                                   \
+                             detail ? detail : "-",                                                       \
+                             static_cast<unsigned long long>(durationNs))
         switch (stage) {
             case Stage::StyleLayerParse:
                 MLN_SIGNPOST_END("style_layer_parse");

@@ -95,6 +95,8 @@ public:
 
     void setUpdateFunction(OnUpdateLayer updateFunction) { _updateFunction = updateFunction; }
 
+    void setNeedsRepaintFunction(OnNeedsRepaint needsRepaintFunction) { _needsRepaintFunction = needsRepaintFunction; }
+
     void setUpdatePropertiesFunction(OnUpdateLayerProperties updateLayerPropertiesFunction) {
         _updateLayerPropertiesFunction = updateLayerPropertiesFunction;
     }
@@ -129,6 +131,9 @@ public:
     // TODO: Does this need to be here or can it be done via the render function.  Potentially, we could
     // have this method called on a background thread/etc or use another way to parallalize work
     OnUpdateLayer _updateFunction;
+
+    //! Optional: Called to determine whether plugin-owned render work needs another frame.
+    OnNeedsRepaint _needsRepaintFunction;
 
     //! Optional: Called when the layer properties change.  The properties are passed as JSON for now
     OnUpdateLayerProperties _updateLayerPropertiesFunction;

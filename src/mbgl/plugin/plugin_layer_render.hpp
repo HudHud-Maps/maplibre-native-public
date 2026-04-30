@@ -32,6 +32,9 @@ public:
 
     void setRenderFunction(style::PluginLayer::OnRenderLayer renderFunction) { _renderFunction = renderFunction; }
     void setUpdateFunction(style::PluginLayer::OnUpdateLayer updateFunction) { _updateFunction = updateFunction; }
+    void setNeedsRepaintFunction(style::PluginLayer::OnNeedsRepaint needsRepaintFunction) {
+        _needsRepaintFunction = needsRepaintFunction;
+    }
     void setUpdatePropertiesFunction(style::PluginLayer::OnUpdateLayerProperties updateLayerPropertiesFunction) {
         _updateLayerPropertiesFunction = updateLayerPropertiesFunction;
     }
@@ -43,6 +46,7 @@ private:
     void evaluate(const PropertyEvaluationParameters&) override;
     bool hasTransition() const override;
     bool hasCrossfade() const override;
+    bool needsRepaint() const override;
     bool queryIntersectsFeature(const GeometryCoordinates&,
                                 const GeometryTileFeature&,
                                 float,
@@ -68,6 +72,8 @@ private:
     style::PluginLayer::OnRenderLayer _renderFunction = nullptr;
 
     style::PluginLayer::OnUpdateLayer _updateFunction = nullptr;
+
+    style::PluginLayer::OnNeedsRepaint _needsRepaintFunction = nullptr;
 
     style::PluginLayer::OnUpdateLayerProperties _updateLayerPropertiesFunction = nullptr;
 

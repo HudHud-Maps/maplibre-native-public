@@ -822,6 +822,12 @@ bool RenderOrchestrator::hasTransitions(TimePoint timePoint) const {
         }
     }
 
+    for (const auto& entry : renderLayers) {
+        if (entry.second->needsRepaint()) {
+            return true;
+        }
+    }
+
     if (placementController.hasTransitions(timePoint)) {
         return true;
     }

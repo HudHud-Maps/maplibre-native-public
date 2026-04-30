@@ -179,6 +179,9 @@ MLN_EXPORT
 /// Called when the layer is updated in the render loop.  This would update animations/etc
 - (void)onUpdateLayer:(MLNPluginLayerDrawingContext)drawingContext;
 
+/// Returns whether the layer has plugin-owned work that needs another frame.
+- (BOOL)needsRepaint;
+
 /// Called when the layer properties are updated.  Can be on initial load from the JSON or when
 /// dynamic properties are updated
 - (void)onUpdateLayerProperties:(NSDictionary *)layerProperties;

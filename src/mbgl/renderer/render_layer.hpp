@@ -106,6 +106,10 @@ public:
     // Returns true if the layer has a pattern property and is actively crossfading.
     virtual bool hasCrossfade() const = 0;
 
+    // Returns true if the layer needs another frame for work that is not a
+    // style transition, such as plugin-owned animation or async render work.
+    virtual bool needsRepaint() const { return false; }
+
     // Returns true if layer writes to depth buffer by drawing using PaintParameters::depthModeFor3D().
     virtual bool is3D() const { return false; }
 

@@ -7685,6 +7685,7 @@ static void *windowScreenContext = &windowScreenContext;
       strongMapView.pluginLayers = [NSMutableArray array];
     }
     [strongMapView.pluginLayers addObject:layer];
+    [layer didMoveToMapView:strongMapView];
 
     // Use weak here so there isn't a retain cycle
     MLNPluginLayer *weakPlugInLayer = layer;
@@ -7762,6 +7763,11 @@ static void *windowScreenContext = &windowScreenContext;
     // Set the lambdas
     // auto pluginLayerImpl = (mbgl::style::PluginLayer::Impl *)pluginLayer->baseImpl.get();
     pluginLayerImpl->setRenderFunction(renderFunction);
+    pluginLayerImpl->setNeedsRepaintFunction([weakPlugInLayer]() -> bool {
+      @autoreleasepool {
+        return [weakPlugInLayer needsRepaint];
+      }
+    });
 
     // Set the update properties function
     pluginLayerImpl->setUpdatePropertiesFunction(

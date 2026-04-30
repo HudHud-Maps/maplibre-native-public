@@ -186,6 +186,10 @@
   // Base class does nothing
 }
 
+- (BOOL)needsRepaint {
+  return NO;
+}
+
 - (void)onUpdateLayerProperties:(NSDictionary *)layerProperties {
   // Base class does nothing
 }

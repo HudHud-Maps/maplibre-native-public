@@ -31,6 +31,7 @@ public:
 public:
     using OnRenderLayer = std::function<void(PaintParameters&)>;
     using OnUpdateLayer = std::function<void(const LayerPrepareParameters&)>;
+    using OnNeedsRepaint = std::function<bool(void)>;
     using OnUpdateLayerProperties = std::function<void(const std::string& properties)>;
     using OnFeatureCollectionLoaded =
         std::function<void(const std::shared_ptr<plugin::FeatureCollection> featureCollection)>;

@@ -246,12 +246,19 @@ void RenderPluginLayer::evaluate(const PropertyEvaluationParameters& parameters)
 }
 
 bool RenderPluginLayer::hasTransition() const {
-    return true;
+    // Plugin layers drive rendering from their own state. Treating them as a
+    // style transition keeps the map repainting forever even when the plugin is idle.
+    return false;
 }
 
 bool RenderPluginLayer::hasCrossfade() const {
     return false;
 }
+
+bool RenderPluginLayer::needsRepaint() const {
+    return _needsRepaintFunction ? _needsRepaintFunction() : false;
+}
+
 bool RenderPluginLayer::queryIntersectsFeature([[maybe_unused]] const GeometryCoordinates&,
                                                [[maybe_unused]] const GeometryTileFeature&,
                                                [[maybe_unused]] float,

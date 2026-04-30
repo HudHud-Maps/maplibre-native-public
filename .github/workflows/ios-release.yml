@@ -191,7 +191,7 @@ jobs:
       - name: Release (Swift Package Index)
         run: |
           echo "::add-mask::${{ secrets.MAPLIBRE_NATIVE_PRIVATE_TOKEN }}"
-          release_workflow_id=81221759  # id of release.yml
+          release_workflow_id=132150651  # id of release.yml
           curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \

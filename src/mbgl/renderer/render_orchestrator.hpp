@@ -168,6 +168,9 @@ public:
 private:
     bool isLoaded() const;
     bool hasTransitions(TimePoint) const;
+    /// Returns true when a render layer requests another frame for work that is
+    /// independent of style transitions, such as plugin-owned render state.
+    bool needsRepaint() const;
 
     RenderSource* getRenderSource(const std::string& id) const;
 

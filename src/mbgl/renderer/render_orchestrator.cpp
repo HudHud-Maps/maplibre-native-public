@@ -516,7 +516,7 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
         }
         renderTreeParameters->symbolFadeChange = placementController.getPlacement()->symbolFadeChange(
             updateParameters->timePoint);
-        renderTreeParameters->needsRepaint = hasTransitions(updateParameters->timePoint);
+        renderTreeParameters->needsRepaint = hasTransitions(updateParameters->timePoint) || needsRepaint();
     } else {
         MLN_TRACE_ZONE(placement);
 
@@ -822,18 +822,22 @@ bool RenderOrchestrator::hasTransitions(TimePoint timePoint) const {
         }
     }
 
-    for (const auto& entry : renderLayers) {
-        if (entry.second->needsRepaint()) {
-            return true;
-        }
-    }
-
     if (placementController.hasTransitions(timePoint)) {
         return true;
     }
 
     for (const auto& entry : renderSources) {
         if (entry.second->hasFadingTiles()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RenderOrchestrator::needsRepaint() const {
+    for (const auto& entry : renderLayers) {
+        if (entry.second->needsRepaint()) {
             return true;
         }
     }

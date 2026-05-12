@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Create maplibre-native-headers.tar.gz
         run: |
@@ -48,6 +49,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - run: brew install webp libuv
 
@@ -100,6 +102,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Install dependencies
         run: .github/scripts/install-linux-deps
@@ -148,6 +151,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 

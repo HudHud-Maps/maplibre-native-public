@@ -11,6 +11,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
           submodules: true
+          persist-credentials: false
 
       - name: Install Doxygen
         run: sudo apt-get install doxygen -y

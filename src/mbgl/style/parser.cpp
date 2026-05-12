@@ -10,6 +10,7 @@
 #include <mbgl/style/conversion_impl.hpp>
 
 #include <mbgl/util/logging.hpp>
+#include <mbgl/util/map_profiler.hpp>
 #include <mbgl/util/string.hpp>
 #include <mbgl/util/convert.hpp>
 
@@ -342,6 +343,24 @@ void Parser::parseLayers(const JSValue& value) {
 }
 
 void Parser::parseLayer(const std::string& id, const JSValue& value, std::unique_ptr<Layer>& layer) {
+#if MLN_MAP_PROFILER_ENABLE
+    const char* profileSourceLayer = nullptr;
+    if (value.HasMember("source-layer") && value["source-layer"].IsString()) {
+        profileSourceLayer = value["source-layer"].GetString();
+    } else if (value.HasMember("source") && value["source"].IsString()) {
+        profileSourceLayer = value["source"].GetString();
+    }
+
+    const char* profileLayerType = nullptr;
+    if (value.HasMember("type") && value["type"].IsString()) {
+        profileLayerType = value["type"].GetString();
+    } else if (value.HasMember("ref") && value["ref"].IsString()) {
+        profileLayerType = "ref";
+    }
+    MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), profileSourceLayer, profileLayerType);
+    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::StyleLayerParse, nullptr);
+#endif
+
     if (layer) {
         // Skip parsing this again. We already have a valid layer definition.
         return;

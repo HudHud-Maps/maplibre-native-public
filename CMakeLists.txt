@@ -17,6 +17,7 @@ option(MLN_WITH_PMTILES "Build with PMTiles support" ON)
 option(MLN_WITH_WERROR "Make all compilation warnings errors" ON)
 option(MLN_USE_UNORDERED_DENSE "Use ankerl dense containers for performance" ON)
 option(MLN_USE_TRACY "Enable Tracy instrumentation" OFF)
+option(MLN_MAP_PROFILER "Enable MapLibre map profiler instrumentation" OFF)
 option(MLN_USE_RUST "Use components in Rust" OFF)
 option(MLN_TEXT_SHAPING_HARFBUZZ "Use haffbuzz to shape complex text" ON)
 option(MLN_CREATE_AUTORELEASEPOOL "Create autoreleasepool in render loop" OFF)
@@ -424,6 +425,7 @@ list(APPEND INCLUDE_FILES
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/indexed_tuple.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/instrumentation.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/interpolate.hpp
+    ${PROJECT_SOURCE_DIR}/include/mbgl/util/map_profiler.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/logging.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/lru_cache.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/noncopyable.hpp
@@ -935,6 +937,7 @@ list(APPEND SRC_FILES
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/identity.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/instrumentation.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/interpolate.cpp
+    ${PROJECT_SOURCE_DIR}/src/mbgl/util/map_profiler.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/intersection_tests.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/intersection_tests.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/io.cpp
@@ -1057,6 +1060,11 @@ target_sources(
     mbgl-core PRIVATE
     ${INCLUDE_FILES}
     ${SRC_FILES}
+)
+
+target_compile_definitions(
+    mbgl-core
+    PRIVATE $<$<BOOL:${MLN_MAP_PROFILER}>:MLN_MAP_PROFILER_ENABLE=1>
 )
 
 if (MLN_WITH_CLANG_TIDY)

@@ -28,6 +28,7 @@
 #include <mbgl/util/math.hpp>
 #include <mbgl/util/string.hpp>
 #include <mbgl/util/logging.hpp>
+#include <mbgl/util/map_profiler.hpp>
 
 #include <algorithm>
 
@@ -317,6 +318,21 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
 
         if (layerAddedOrChanged || zoomChangedAndMatters || evaluationParameters.hasCrossfade ||
             layer.hasTransition()) {
+#if MLN_MAP_PROFILER_ENABLE
+            const char* profileSourceLayer = layer.baseImpl->sourceLayer.empty() ? nullptr
+                                                                                 : layer.baseImpl->sourceLayer.c_str();
+            if (!profileSourceLayer && !layer.baseImpl->source.empty()) {
+                profileSourceLayer = layer.baseImpl->source.c_str();
+            }
+            const char* profileLayerType = layer.baseImpl->getTypeInfo() ? layer.baseImpl->getTypeInfo()->type
+                                                                         : nullptr;
+            if (!profileLayerType && !layer.baseImpl->source.empty()) {
+                profileLayerType = layer.baseImpl->source.c_str();
+            }
+            MLN_MAP_PROFILE_CONTEXT_DETAIL(id.c_str(), profileSourceLayer, profileLayerType);
+            MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::RenderLayerEvaluate, nullptr);
+#endif
+
             const auto previousMask = layer.evaluatedProperties->constantsMask();
             layer.evaluate(evaluationParameters);
             if (previousMask != layer.evaluatedProperties->constantsMask()) {

@@ -21,6 +21,7 @@
 #include <mbgl/util/exception.hpp>
 #include <mbgl/util/stopwatch.hpp>
 #include <mbgl/util/thread_pool.hpp>
+#include <mbgl/util/map_profiler.hpp>
 
 #include <unordered_set>
 #include <utility>
@@ -449,6 +450,19 @@ void GeometryTileWorker::parse() {
         }
 
         const style::Layer::Impl& leaderImpl = *(group.at(0)->baseImpl);
+#if MLN_MAP_PROFILER_ENABLE
+        const char* profileSourceLayer = leaderImpl.sourceLayer.empty() ? nullptr : leaderImpl.sourceLayer.c_str();
+        if (!profileSourceLayer && !leaderImpl.source.empty()) {
+            profileSourceLayer = leaderImpl.source.c_str();
+        }
+        const char* profileLayerType = leaderImpl.getTypeInfo() ? leaderImpl.getTypeInfo()->type : nullptr;
+        if (!profileLayerType && !leaderImpl.source.empty()) {
+            profileLayerType = leaderImpl.source.c_str();
+        }
+        MLN_MAP_PROFILE_CONTEXT_DETAIL(leaderImpl.id.c_str(), profileSourceLayer, profileLayerType);
+        MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileLayerParse, nullptr);
+#endif
+
         BucketParameters parameters{
             .tileID = id, .mode = mode, .pixelRatio = pixelRatio, .layerType = leaderImpl.getTypeInfo()};
 
@@ -492,9 +506,13 @@ void GeometryTileWorker::parse() {
             for (std::size_t i = 0; !obsolete && i < geometryLayer->featureCount(); i++) {
                 std::unique_ptr<GeometryTileFeature> feature = geometryLayer->getFeature(i);
 
-                if (!filter(expression::EvaluationContext(static_cast<float>(this->id.overscaledZ), feature.get())
-                                .withCanonicalTileID(&id.canonical)))
-                    continue;
+                {
+                    MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::TileFilterEvaluate, "filter");
+                    if (!filter(expression::EvaluationContext(static_cast<float>(this->id.overscaledZ), feature.get())
+                                    .withCanonicalTileID(&id.canonical))) {
+                        continue;
+                    }
+                }
 
                 const GeometryCollection& geometries = feature->getGeometries();
                 bucket->addFeature(*feature, geometries, {}, PatternLayerMap(), i, id.canonical);

@@ -34,6 +34,7 @@
 #include <mbgl/style/conversion/get_json_type.hpp>
 #include <mbgl/style/conversion_impl.hpp>
 
+#include <mbgl/util/map_profiler.hpp>
 #include <mbgl/util/string.hpp>
 
 #include <mapbox/eternal.hpp>
@@ -167,6 +168,8 @@ ParseResult ParsingContext::parse(const Convertible& value,
             return ParseResult();
         }
 
+        MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::ExpressionParse, op->c_str());
+
         auto parseFunction = expressionRegistry.find(op->c_str());
         if (parseFunction != expressionRegistry.end()) {
             parsed = parseFunction->second(value, *this);
@@ -174,6 +177,7 @@ ParseResult ParsingContext::parse(const Convertible& value,
             parsed = parseCompoundExpression(*op, value, *this);
         }
     } else {
+        MLN_MAP_PROFILE_SCOPE(mbgl::util::map_profiler::Stage::ExpressionParse, "literal");
         parsed = Literal::parse(value, *this);
     }
 

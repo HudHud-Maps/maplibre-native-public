@@ -1,6 +1,7 @@
 #include <mbgl/util/action_journal_impl.hpp>
 #include <mbgl/util/logging.hpp>
 #include <mbgl/util/monotonic_timer.hpp>
+#include <mbgl/util/map_profiler.hpp>
 #include <mbgl/style/style.hpp>
 #include <mbgl/map/map.hpp>
 
@@ -9,8 +10,11 @@
 #include <rapidjson/writer.h>
 
 #include <algorithm>
+#include <array>
+#include <map>
 #include <mutex>
 #include <regex>
+#include <utility>
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
@@ -43,6 +47,7 @@ namespace util {
 constexpr auto ACTION_JOURNAL_DIRECTORY_NAME = "action_journal";
 constexpr auto ACTION_JOURNAL_FILE_NAME = "action_journal";
 constexpr auto ACTION_JOURNAL_FILE_EXTENSION = "log";
+constexpr std::size_t ACTION_JOURNAL_PROFILER_TOP_K = 200;
 
 class MapEnvironmentSnapshot {
 public:
@@ -153,10 +158,13 @@ ActionJournal::Impl::Impl(const Map& map_, const ActionJournalOptions& options_)
     if (!openFile(detectFiles(), false)) {
         Log::Error(Event::General, "Failed to open Action Journal file");
     }
+
+    map_profiler::retainSink();
 }
 
 ActionJournal::Impl::~Impl() {
     flush();
+    map_profiler::releaseSink();
 }
 
 std::string ActionJournal::Impl::getLogDirectory() const {
@@ -303,7 +311,14 @@ void ActionJournal::Impl::onDidFinishRenderingFrame(const RenderFrameStatus& fra
         return;
     }
 
-    scheduler->schedule([=, this, env = MapEnvironmentSnapshot(*this), stats = std::move(renderingStats)]() {
+    auto profilerSnapshot = map_profiler::consumeSnapshot(0);
+    const auto profilerSampleRate = map_profiler::getEvalSampleRate();
+
+    scheduler->schedule([=,
+                         this,
+                         env = MapEnvironmentSnapshot(*this),
+                         stats = std::move(renderingStats),
+                         profilerSnapshot = std::move(profilerSnapshot)]() mutable {
         log(ActionJournalEvent("renderingStats", env)
                 .addEvent("encodingMin", stats.encodingMin)
                 .addEvent("encodingMax", stats.encodingMax)
@@ -311,6 +326,169 @@ void ActionJournal::Impl::onDidFinishRenderingFrame(const RenderFrameStatus& fra
                 .addEvent("renderingMin", stats.renderingMin)
                 .addEvent("renderingMax", stats.renderingMax)
                 .addEvent("renderingAvg", stats.renderingTotal / stats.frameCount));
+
+        if (profilerSnapshot.entries.empty() && profilerSnapshot.droppedSamples == 0) {
+            return;
+        }
+
+        ActionJournalEvent profilerEvent("profilingStats", env);
+        profilerEvent.addEvent("windowStartNs", profilerSnapshot.windowStartNs)
+            .addEvent("windowEndNs", profilerSnapshot.windowEndNs)
+            .addEvent("sampleRate", profilerSampleRate)
+            .addEvent("droppedSamples", profilerSnapshot.droppedSamples)
+            .addEvent("entryCount", static_cast<uint64_t>(profilerSnapshot.entries.size()));
+
+        auto& allocator = profilerEvent.json.GetAllocator();
+        rapidjson::Value entriesJson(rapidjson::kArrayType);
+        entriesJson.Reserve(
+            static_cast<rapidjson::SizeType>(std::min<std::size_t>(ACTION_JOURNAL_PROFILER_TOP_K,
+                                                                    profilerSnapshot.entries.size())),
+            allocator);
+
+        struct AggregateStats {
+            uint64_t count = 0;
+            uint64_t totalDurationNs = 0;
+            uint64_t maxDurationNs = 0;
+        };
+
+        std::map<std::string, AggregateStats> byLayerMap;
+        std::map<std::string, AggregateStats> byExpressionMap;
+        std::map<std::string, std::array<std::string, 4>> byExpressionLabels;
+
+        const auto merge = [](AggregateStats& dst, const map_profiler::SnapshotEntry& src) {
+            dst.count += src.count;
+            dst.totalDurationNs += src.totalDurationNs;
+            dst.maxDurationNs = std::max(dst.maxDurationNs, src.maxDurationNs);
+        };
+
+        for (const auto& entry : profilerSnapshot.entries) {
+            if (!entry.layer.empty()) {
+                merge(byLayerMap[entry.layer], entry);
+            }
+
+            if ((entry.stage == map_profiler::Stage::ExpressionEvaluate ||
+                 entry.stage == map_profiler::Stage::ExpressionParse) &&
+                !entry.detail.empty()) {
+                const std::string stage = map_profiler::stageToString(entry.stage);
+                std::string key;
+                key.reserve(stage.size() + entry.layer.size() + entry.property.size() + entry.detail.size() + 4);
+                key.append(stage);
+                key.push_back('\x1f');
+                key.append(entry.layer);
+                key.push_back('\x1f');
+                key.append(entry.property);
+                key.push_back('\x1f');
+                key.append(entry.detail);
+                merge(byExpressionMap[key], entry);
+                byExpressionLabels.try_emplace(
+                    key, std::array<std::string, 4>{stage, entry.layer, entry.property, entry.detail});
+            }
+        }
+
+        for (std::size_t i = 0;
+             i < profilerSnapshot.entries.size() && i < static_cast<std::size_t>(ACTION_JOURNAL_PROFILER_TOP_K);
+             ++i) {
+            const auto& entry = profilerSnapshot.entries[i];
+            rapidjson::Value entryJson(rapidjson::kObjectType);
+            entryJson.AddMember("stage", rapidjson::StringRef(map_profiler::stageToString(entry.stage)), allocator);
+
+            if (!entry.layer.empty()) {
+                rapidjson::Value value(rapidjson::kStringType);
+                value.SetString(entry.layer.c_str(), static_cast<rapidjson::SizeType>(entry.layer.size()), allocator);
+                entryJson.AddMember("layer", value, allocator);
+            }
+
+            if (!entry.property.empty()) {
+                rapidjson::Value value(rapidjson::kStringType);
+                value.SetString(
+                    entry.property.c_str(), static_cast<rapidjson::SizeType>(entry.property.size()), allocator);
+                entryJson.AddMember("property", value, allocator);
+            }
+
+            if (!entry.detail.empty()) {
+                rapidjson::Value value(rapidjson::kStringType);
+                value.SetString(entry.detail.c_str(), static_cast<rapidjson::SizeType>(entry.detail.size()), allocator);
+                entryJson.AddMember("detail", value, allocator);
+            }
+
+            entryJson.AddMember("count", entry.count, allocator);
+            entryJson.AddMember("totalDurationNs", entry.totalDurationNs, allocator);
+            entryJson.AddMember("maxDurationNs", entry.maxDurationNs, allocator);
+
+            entriesJson.PushBack(entryJson, allocator);
+        }
+
+        profilerEvent.addEvent("truncatedEntries", profilerSnapshot.entries.size() > ACTION_JOURNAL_PROFILER_TOP_K);
+        profilerEvent.eventJson.AddMember("entries", entriesJson, allocator);
+
+        rapidjson::Value byLayerJson(rapidjson::kArrayType);
+        std::vector<std::pair<std::string, AggregateStats>> byLayer(byLayerMap.begin(), byLayerMap.end());
+        std::sort(byLayer.begin(), byLayer.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second.totalDurationNs > rhs.second.totalDurationNs;
+        });
+        byLayerJson.Reserve(
+            static_cast<rapidjson::SizeType>(std::min<std::size_t>(ACTION_JOURNAL_PROFILER_TOP_K, byLayer.size())),
+            allocator);
+        for (std::size_t i = 0; i < byLayer.size() && i < ACTION_JOURNAL_PROFILER_TOP_K; ++i) {
+            const auto& [layer, layerStats] = byLayer[i];
+            rapidjson::Value layerJson(rapidjson::kObjectType);
+            rapidjson::Value layerName(rapidjson::kStringType);
+            layerName.SetString(layer.c_str(), static_cast<rapidjson::SizeType>(layer.size()), allocator);
+            layerJson.AddMember("layer", layerName, allocator);
+            layerJson.AddMember("count", layerStats.count, allocator);
+            layerJson.AddMember("totalDurationNs", layerStats.totalDurationNs, allocator);
+            layerJson.AddMember("maxDurationNs", layerStats.maxDurationNs, allocator);
+            byLayerJson.PushBack(layerJson, allocator);
+        }
+        profilerEvent.eventJson.AddMember("byLayer", byLayerJson, allocator);
+
+        rapidjson::Value byExpressionJson(rapidjson::kArrayType);
+        std::vector<std::pair<std::string, AggregateStats>> byExpression(byExpressionMap.begin(), byExpressionMap.end());
+        std::sort(byExpression.begin(), byExpression.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second.totalDurationNs > rhs.second.totalDurationNs;
+        });
+        byExpressionJson.Reserve(static_cast<rapidjson::SizeType>(
+            std::min<std::size_t>(ACTION_JOURNAL_PROFILER_TOP_K, byExpression.size())), allocator);
+        for (std::size_t i = 0; i < byExpression.size() && i < ACTION_JOURNAL_PROFILER_TOP_K; ++i) {
+            const auto& [key, exprStats] = byExpression[i];
+            const auto labelsIt = byExpressionLabels.find(key);
+            if (labelsIt == byExpressionLabels.end()) {
+                continue;
+            }
+
+            const auto& labels = labelsIt->second;
+            rapidjson::Value expressionJson(rapidjson::kObjectType);
+
+            rapidjson::Value stageName(rapidjson::kStringType);
+            stageName.SetString(labels[0].c_str(), static_cast<rapidjson::SizeType>(labels[0].size()), allocator);
+            expressionJson.AddMember("stage", stageName, allocator);
+
+            if (!labels[1].empty()) {
+                rapidjson::Value layerName(rapidjson::kStringType);
+                layerName.SetString(labels[1].c_str(), static_cast<rapidjson::SizeType>(labels[1].size()), allocator);
+                expressionJson.AddMember("layer", layerName, allocator);
+            }
+
+            if (!labels[2].empty()) {
+                rapidjson::Value propertyName(rapidjson::kStringType);
+                propertyName.SetString(
+                    labels[2].c_str(), static_cast<rapidjson::SizeType>(labels[2].size()), allocator);
+                expressionJson.AddMember("property", propertyName, allocator);
+            }
+
+            rapidjson::Value expressionName(rapidjson::kStringType);
+            expressionName.SetString(labels[3].c_str(), static_cast<rapidjson::SizeType>(labels[3].size()), allocator);
+            expressionJson.AddMember("expression", expressionName, allocator);
+
+            expressionJson.AddMember("count", exprStats.count, allocator);
+            expressionJson.AddMember("totalDurationNs", exprStats.totalDurationNs, allocator);
+            expressionJson.AddMember("maxDurationNs", exprStats.maxDurationNs, allocator);
+
+            byExpressionJson.PushBack(expressionJson, allocator);
+        }
+        profilerEvent.eventJson.AddMember("byExpression", byExpressionJson, allocator);
+
+        log(std::move(profilerEvent));
     });
 
     renderingStats = {};

@@ -146,10 +146,11 @@ jobs:
 
       - name: Copy developer config with API key for UI tests
         if: github.ref == 'refs/heads/main'
+        env:
+          MAPLIBRE_DEVELOPER_CONFIG_XML: ${{ secrets.MAPLIBRE_DEVELOPER_CONFIG_XML }}
         run: |
-          MAPLIBRE_DEVELOPER_CONFIG_XML='${{ secrets.MAPLIBRE_DEVELOPER_CONFIG_XML }}'
           if [ -n "${MAPLIBRE_DEVELOPER_CONFIG_XML}" ]; then
-            echo "${MAPLIBRE_DEVELOPER_CONFIG_XML}" > MapLibreAndroidTestApp/src/main/res/values/developer-config.xml
+            printf '%s' "${MAPLIBRE_DEVELOPER_CONFIG_XML}" > MapLibreAndroidTestApp/src/main/res/values/developer-config.xml
           else
             echo "No secrets.MAPLIBRE_DEVELOPER_CONFIG_XML variable set, not copying..."
           fi
@@ -458,6 +459,8 @@ jobs:
       # and the platform/android/VERSION file has changed
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        with:
+          persist-credentials: false
 
       - name: VERSION file changed
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

@@ -72,8 +72,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
-
       - name: Finalize release (set draft=false)
         run: |
           gh release edit android-testapp-${{ github.sha }} --draft=false
